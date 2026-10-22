@@ -21,7 +21,7 @@ DATA_DIR = os.path.join(BASE_DIR, "data", "1_clapAI_UIT-VSMEC_csv")
 TEENCODE_DICT = {
     'ko': 'không', 'k': 'không', 'khg': 'không', 'hông': 'không', 'hổng': 'không',
     'dc': 'được', 'đc': 'được', 'dk': 'được', 'đk': 'được',
-    'j': 'gì', 'wa': 'quá', 'wá': 'quá',
+    'j': 'gì', 'wa': 'quá', 'wá': 'quá', 'waa': 'quá',
     'bik': 'biết', 'bít': 'biết', 'vs': 'với', 'cx': 'cũng',
     'r': 'rồi', 'rùi': 'rồi', 'thui': 'thôi', 'chừ': 'giờ',
     'ae': 'anh em', 'mn': 'mọi người', 'cmt': 'bình luận',
@@ -65,12 +65,12 @@ def preprocess_text(text):
     # 4. Chuyển chữ thường
     text = text.lower()
     
-    # 5. Chuẩn hóa teencode
+    # 5. Rút gọn ký tự lặp kéo dài trước (ví dụ: đẹpppp -> đẹp, waaa -> wa)
+    text = re.sub(r'([a-zA-Zà-ỹÀ-Ỹ])\1{2,}', r'\1', text)
+    
+    # 6. Chuẩn hóa teencode sau khi đã rút gọn (ví dụ: wa -> quá)
     words = [TEENCODE_DICT.get(w, w) for w in text.split()]
     text = ' '.join(words)
-    
-    # 6. Rút gọn ký tự lặp (ví dụ: đẹpppp -> đẹp)
-    text = re.sub(r'([a-zA-Zà-ỹÀ-Ỹ])\1{2,}', r'\1', text)
     
     # 7. Giữ lại chữ cái, số, khoảng trắng và gạch dưới (để giữ các token emoji_vui...)
     text = re.sub(r'[^\w\s_]', ' ', text)
