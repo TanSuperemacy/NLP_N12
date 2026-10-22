@@ -1,0 +1,49 @@
+flowchart TD
+    subgraph S1 ["1. INPUT DATA (UIT-VSMEC CORPUS)"]
+        A["Bộ dữ liệu bình luận MXH tiếng Việt<br/>- Train: 5,548 mẫu<br/>- Validation: 686 mẫu<br/>- Test: 693 mẫu<br/>(7 nhãn: Enjoyment, Disgust, Other, Sadness, Anger, Fear, Surprise)"]
+    end
+
+    subgraph S2 ["2. TIỀN XỬ LÝ VĂN BẢN CHUYÊN SÂU (PREPROCESSING)"]
+        B1["Chuẩn hóa bảng mã Unicode NFC<br/>(Khắc phục lỗi dấu tổ hợp bị tách rời)"]
+        B2["Xóa URL rác & Chuyển chữ thường (lowercase)"]
+        B3["Bảo tồn & Ánh xạ Emoticon / Emoji<br/>(:)), ^^ -> icon_vui | 😭, :(( -> emoji_buon<br/>😡 -> emoji_tuc_gian | 😱 -> emoji_so_hai)"]
+        B4["Chuẩn hóa Teencode & Từ viết tắt MXH<br/>(ko -> không, dc -> được, wa -> quá, j -> gì...)"]
+        B5["Rút gọn ký tự lặp kéo dài<br/>(quáaaaa -> quá, đẹpppp -> đẹp)"]
+        B6["Tách từ ghép tiếng Việt (Word Segmentation)<br/>bằng thư viện PyVi (ViTokenizer)"]
+        
+        B1 --> B2 --> B3 --> B4 --> B5 --> B6
+    end
+
+    subgraph S3 ["3. TRÍCH XUẤT ĐẶC TRƯNG (TF-IDF VECTORIZATION)"]
+        C1["TfidfVectorizer Cấu hình tối ưu:<br/>- N-gram Range: (1, 2) (bắt trọn cụm phủ định như 'không thích')<br/>- Max features: 10,000 đặc trưng quan trọng<br/>- Sublinear TF: True (làm mượt tần số xuất hiện)"]
+        C2["Nguyên tắc chống rò rỉ dữ liệu (Data Leakage):<br/>- Fit & Transform CHỈ trên tập Train<br/>- Chỉ Transform trên tập Val và Test"]
+        C1 --> C2
+    end
+
+    subgraph S4 ["4. HUẤN LUYỆN & TINH CHỈNH MÔ HÌNH (MODEL & GRIDSEARCH)"]
+        D1["Thuật toán: Linear SVM (LinearSVC)<br/>- Class Weight = 'balanced' (cân bằng nhãn lệch)"]
+        D2["Tinh chỉnh siêu tham số C bằng GridSearchCV:<br/>- Dải tìm kiếm: C ∈ [0.1, 0.3, 0.5, 0.8, 1.0, 1.5, 2.0]<br/>- 5-Fold Stratified Cross-Validation<br/>- Tiêu chí tối ưu: scoring = 'f1_macro'"]
+        D3["-> Tìm ra C tối ưu nhất: C = 0.3"]
+        D1 --> D2 --> D3
+    end
+
+    subgraph S5 ["5. ĐÁNH GIÁ & XUẤT KẾT QUẢ (EVALUATION & INFERENCE)"]
+        E1["Đánh giá trên tập Validation & Test:<br/>- Test Accuracy: 59.31%<br/>- Test Macro F1: 56.52%<br/>- Test Weighted F1: 59.32%"]
+        E2["Vẽ Ma trận nhầm lẫn (Confusion Matrix Heatmap)<br/>-> Xuất file confusion_matrix.png"]
+        E3["Bảng đối sánh hiệu năng các giá trị C<br/>-> Xuất file c_comparison_results.csv"]
+        E4["Dự đoán trên tập Test & Xuất file nộp:<br/>-> predictions.csv (id, text, ground_truth, predicted_label)"]
+        E1 --> E2
+        E1 --> E3
+        E1 --> E4
+    end
+
+    S1 --> S2
+    S2 --> S3
+    S3 --> S4
+    S4 --> S5
+
+    style S1 fill:#e3f2fd,stroke:#1565c0,stroke-width:2px;
+    style S2 fill:#fff8e1,stroke:#f57f17,stroke-width:2px;
+    style S3 fill:#f3e5f5,stroke:#6a1b9a,stroke-width:2px;
+    style S4 fill:#e8f5e9,stroke:#2e7d32,stroke-width:2px;
+    style S5 fill:#fbe9e7,stroke:#c62828,stroke-width:2px;
