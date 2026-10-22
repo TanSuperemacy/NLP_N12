@@ -39,6 +39,28 @@ notebook_content = {
    "cell_type": "markdown",
    "metadata": {},
    "source": [
+    "### 0.1 Tự động tải dữ liệu từ Hugging Face về môi trường Colab\n",
+    "(Không cần upload file thủ công từ máy tính, chạy cell này là có dữ liệu ngay lập tức!)"
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": None,
+   "metadata": {},
+   "outputs": [],
+   "source": [
+    "import os\n",
+    "os.makedirs('data/1_clapAI_UIT-VSMEC_csv', exist_ok=True)\n",
+    "!wget -q -O data/1_clapAI_UIT-VSMEC_csv/train.csv https://huggingface.co/datasets/clapAI/UIT-VSMEC/resolve/main/train.csv\n",
+    "!wget -q -O data/1_clapAI_UIT-VSMEC_csv/val.csv https://huggingface.co/datasets/clapAI/UIT-VSMEC/resolve/main/val.csv\n",
+    "!wget -q -O data/1_clapAI_UIT-VSMEC_csv/test.csv https://huggingface.co/datasets/clapAI/UIT-VSMEC/resolve/main/test.csv\n",
+    "print('Tải dữ liệu thành công!')"
+   ]
+  },
+  {
+   "cell_type": "markdown",
+   "metadata": {},
+   "source": [
     "### 1. Khai báo các thư viện cần thiết"
    ]
   },
@@ -159,7 +181,7 @@ notebook_content = {
     "    \n",
     "    # Ánh xạ Emoticon cảm xúc\n",
     "    text = re.sub(r':\\)+|:\\-\\)+|\\^_\\^|\\^\\^|:D|:d|xD|XD|;\\)|;-\\)', ' icon_vui ', text)\n",
-    "    text = re.sub(r':\\(+|:\\-\\(+|T_T|T\\.T|:\'\\(|:\\{+', ' icon_buon ', text)\n",
+    "    text = re.sub(r\":\\(+|:\\-\\(+|T_T|T\\.T|:'\\(|:\\{+\", ' icon_buon ', text)\n",
     "    text = re.sub(r':O|:o|:-O|:-o|o_O|O_o', ' icon_ngac_nhien ', text)\n",
     "    text = re.sub(r':3', ' icon_meo ', text)\n",
     "    text = re.sub(r'<3|♥', ' icon_yeu ', text)\n",
