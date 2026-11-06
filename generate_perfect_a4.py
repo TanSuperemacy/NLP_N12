@@ -28,8 +28,8 @@ def build_pdf(filename="pipeline.pdf", include_title=True):
     item_style = ParagraphStyle(
         'ItemStyle',
         fontName='Arial',
-        fontSize=8.8,
-        leading=13.0,
+        fontSize=8.4,
+        leading=11.8,
         textColor=colors.black
     )
     
@@ -38,7 +38,7 @@ def build_pdf(filename="pipeline.pdf", include_title=True):
             "badge": "BƯỚC 1",
             "title": "TÌM HIỂU & CHUẨN BỊ BỘ DỮ LIỆU (DATA EXPLORATION)",
             "items": [
-                "<b>• Nguồn ngữ liệu gốc:</b> Bộ dữ liệu UIT-VSMEC (Vietnamese Social Media Emotion Corpus) gồm 6,927 bình luận Facebook.",
+                "<b>• Nguồn ngữ liệu gốc:</b> Bộ dữ liệu UIT-VSMEC (Vietnamese Social Media Emotion Corpus) gồm 6,927 bình luận Facebook (Null = 0, Duplicate = 0).",
                 "<b>• Phân chia phân tầng (Stratified Split):</b> Tỷ lệ chuẩn 80 - 10 - 10 đảm bảo đủ 7 nhãn ở cả 3 tập (Train: 5,548 | Val: 686 | Test: 693).",
                 "<b>• Không gian nhãn & Phân bố:</b> 7 nhãn lệch mẫu nặng: Enjoyment (1,558), Disgust (1,071), Other (1,021), Sadness (947), Anger (391), Fear (318), Surprise (242)."
             ]
@@ -47,51 +47,51 @@ def build_pdf(filename="pipeline.pdf", include_title=True):
             "badge": "BƯỚC 2",
             "title": "TIỀN XỬ LÝ VĂN BẢN CHUYÊN SÂU (TEXT PREPROCESSING PIPELINE)",
             "items": [
-                "<b>• B1. Chuẩn hóa Unicode NFC:</b> Khắc phục lỗi phân mảnh dấu thanh tổ hợp tiếng Việt trên MXH (VD: thi ́ ch -> thích).",
-                "<b>• B2. Làm sạch cơ bản:</b> Loại bỏ URL rác (http/www...), ký tự điều khiển lạ và chuyển toàn bộ văn bản về chữ thường (lowercase).",
-                "<b>• B3. Bảo tồn Emoji & Emoticon:</b> Ánh xạ icon/emoji thành token cảm xúc (:)) -> icon_vui; 😭, :(( -> emoji_buon; 😡 -> emoji_tuc_gian...).",
-                "<b>• B4. Rút gọn ký tự lặp (chạy trước):</b> Thu gọn ký tự kéo dài nhấn mạnh về dạng chuẩn (quáaaaa -> quá, đẹpppp -> đẹp, waaa -> wa).",
-                "<b>• B5. Chuẩn hóa Teencode (chạy sau):</b> Ánh xạ từ viết tắt MXH về chuẩn (wa -> quá, ko -> không, dc -> được, j -> gì, cx -> cũng, bik -> biết...).",
+                "<b>• B1. Chuẩn hóa Unicode NFC & Làm sạch:</b> Khắc phục lỗi phân mảnh dấu thanh tổ hợp tiếng Việt (thi ́ ch -> thích) và xóa URL rác (http/www...).",
+                "<b>• B2. Bảo tồn Emoji & Emoticon:</b> Ánh xạ icon/emoji thành token ngữ nghĩa (:)) -> icon_vui; 😭, :(( -> emoji_buon; 😡 -> emoji_tuc_gian...).",
+                "<b>• B3. Bắt tiếng cười/khóc TRƯỚC khi rút gọn lặp:</b> Ánh xạ kkk+, haha+, hihi+ -> icon_vui/emoji_vui trước để tránh lỗi kkk -> k -> không (phủ định).",
+                "<b>• B4. Bảo tồn dấu câu cảm xúc & Tách dấu câu:</b> Ánh xạ !+ -> token_than, ?+ -> token_hoi (hỗ trợ Surprise/Anger); tách dấu câu trước khi tra từ điển.",
+                "<b>• B5. Rút gọn ký tự lặp & Chuẩn hóa Teencode:</b> Thu gọn từ kéo dài (đẹpppp -> đẹp) và chuẩn hóa chính tả khách quan (ko, -> không, dc. -> được, vl -> vãi).",
                 "<b>• B6. Tách từ ghép tiếng Việt (PyVi):</b> Phân định ranh giới từ bằng ViTokenizer (thời buổi -> thời_buổi, nước mắt -> nước_mắt)."
             ]
         },
         {
             "badge": "BƯỚC 3",
-            "title": "TRÍCH XUẤT ĐẶC TRƯNG TỪ VỰNG (TF-IDF VECTORIZATION)",
+            "title": "TRÍCH XUẤT ĐẶC TRƯNG KÉP (FEATUREUNION: WORD + CHAR_WB TF-IDF)",
             "items": [
-                "<b>• Mô hình biểu diễn:</b> TF-IDF Vectorizer (Term Frequency - Inverse Document Frequency) trích xuất đặc trưng thống kê từ ngữ.",
-                "<b>• Cấu hình N-gram:</b> ngram_range = (1, 2) (bắt trọn cả từ đơn lẫn cặp 2 từ liền kề mang nghĩa phủ định: 'không thích', 'rất buồn').",
-                "<b>• Tham số tối ưu hóa:</b> max_features = 10,000 đặc trưng quan trọng nhất  |  sublinear_tf = True (làm mượt tần số xuất hiện của từ).",
-                "<b>• Chống rò rỉ dữ liệu (No Data Leakage):</b> fit_transform CHỈ áp dụng trên tập Train; tập Validation và Test CHỈ áp dụng transform."
+                "<b>• Kiến trúc FeatureUnion (tương tự Mục 5.2 bài báo gốc UIT):</b> Kết hợp song song đặc trưng từ vựng (Word TF-IDF) và hình thái ký tự (Char_wb TF-IDF).",
+                "<b>• Nhánh 1 - Word TF-IDF:</b> ngram_range = (1, 2) bắt từ đơn và cụm phủ định ('không_thích', 'quá_buồn')  |  min_df = 2, max_df = 0.9  |  sublinear_tf = True.",
+                "<b>• Nhánh 2 - Char_wb TF-IDF:</b> analyzer = 'char_wb', ngram_range = (2, 5) bắt biến thể teencode/lỗi chính tả trong từ  |  min_df = 2  |  sublinear_tf = True.",
+                "<b>• Chống rò rỉ dữ liệu (Zero Data Leakage):</b> Đóng gói FeatureUnion và LinearSVC vào sklearn.pipeline.Pipeline (chỉ fit trên fold Train khi CV)."
             ]
         },
         {
             "badge": "BƯỚC 4",
             "title": "HUẤN LUYỆN & TINH CHỈNH MÔ HÌNH (MODEL TRAINING & GRIDSEARCHCV)",
             "items": [
-                "<b>• Thuật toán phân loại:</b> Linear Support Vector Classification (LinearSVC) - Tìm siêu phẳng phân tách tối ưu lồi trong không gian 10,000 chiều.",
-                "<b>• Cân bằng dữ liệu lệch nhãn:</b> class_weight = 'balanced' (tự động cân chỉnh trọng số phạt nghịch đảo tần suất lớp để hỗ trợ các nhãn ít mẫu).",
-                "<b>• Xác định độ đo mục tiêu & Tinh chỉnh:</b> Thiết lập scoring = 'f1_macro' trong 5-Fold Stratified CV với dải C ∈ [0.1, 0.3, 0.5, 0.8, 1.0, 1.5, 2.0].",
-                "<b>• Kết quả tối ưu:</b> Tìm ra siêu tham số tối ưu nhất C = 0.3 (Rank 1, CV Macro F1: 52.43%) đạt độ cân bằng tốt nhất giữa bias và variance."
+                "<b>• Thuật toán phân loại:</b> Linear Support Vector Classification (LinearSVC, random_state = 42, max_iter = 5000).",
+                "<b>• Cân bằng dữ liệu lệch nhãn:</b> class_weight = 'balanced' (tự động cân chỉnh trọng số phạt nghịch đảo tần suất lớp giúp tăng vọt F1 ở các nhãn thiểu số).",
+                "<b>• Xác định độ đo mục tiêu & Tinh chỉnh:</b> Thiết lập scoring = 'f1_macro' trong 5-Fold StratifiedKFold với dải C ∈ [0.05, 0.1, 0.2, 0.3, 0.5, 1.0].",
+                "<b>• Kết quả tối ưu:</b> Tìm ra siêu tham số tối ưu C = 0.3 (Rank 1, Best 5-Fold CV Macro F1 = 53.91%) vừa chống học vẹt (overfit) vừa chống underfit."
             ]
         },
         {
             "badge": "BƯỚC 5",
             "title": "ĐÁNH GIÁ MÔ HÌNH & HIỂN THỊ KẾT QUẢ (EVALUATION & VISUALIZATION)",
             "items": [
-                "<b>• Kết quả độ đo (Test Set):</b> Accuracy: 58.87% (408/693 mẫu)  |  Macro F1-Score: 55.97%  |  Weighted F1-Score: 58.88%.",
-                "<b>• Kết quả độ đo (Validation Set):</b> Accuracy: 55.39%  |  Macro F1-Score: 51.81%  |  Weighted F1-Score: 55.54%.",
-                "<b>• F1-Score từng nhãn (Test Set):</b> Enjoyment: 68.21% | Sadness: 66.09% | Fear: 62.26% | Other: 52.94% | Surprise: 52.05% | Disgust: 51.56% | Anger: 38.71%.",
-                "<b>• Trực quan hóa & Sản phẩm bàn giao:</b> Ma trận nhầm lẫn (confusion_matrix.png phân tích các cặp dễ nhầm lẫn như Anger-Disgust), predictions.csv."
+                "<b>• Giao thức 1 (Train-Only 5,548 mẫu - Chuẩn UIT):</b> Test Acc: 60.89% | Macro F1: 57.75% | Weighted F1: 60.92% (Vượt SVM UIT +4.05% & CNN UIT +1.18%).",
+                "<b>• Giao thức 2 (Train + Val 6,234 mẫu - Mở rộng):</b> Test Acc: 61.04% | Macro F1: 58.24% | Weighted F1: 61.16% (Bứt phá +1.42% WF1 so với CNN UIT).",
+                "<b>• Per-Class F1 (Test - Train-Only):</b> Enjoyment: 69.61% | Sadness: 67.83% | Fear: 64.00% | Disgust: 56.83% | Surprise: 56.76% | Other: 53.94% | Anger: 35.29%.",
+                "<b>• Trực quan hóa & Bàn giao:</b> Bảng Ablation Study bóc tách đóng góp, Confusion Matrix (confusion_matrix.png), file dự đoán predictions.csv (693 dòng)."
             ]
         }
     ]
     
     measured_stages = []
     total_stages_h = 0
-    header_bar_h = 22
-    padding_v = 14
-    item_gap = 4.5
+    header_bar_h = 20
+    padding_v = 11
+    item_gap = 3.5
     
     for s in stages_data:
         para_objs = []
@@ -113,7 +113,7 @@ def build_pdf(filename="pipeline.pdf", include_title=True):
         total_stages_h += total_box_h
         
     num_arrows = len(stages_data) - 1
-    arrow_h = 16
+    arrow_h = 12
     total_flow_h = total_stages_h + num_arrows * arrow_h
     
     top_y = height - 26

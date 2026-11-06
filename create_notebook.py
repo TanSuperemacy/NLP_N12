@@ -1,5 +1,9 @@
 import json
 import os
+import sys
+sys.stdout.reconfigure(encoding='utf-8')
+
+null = None
 
 notebook_content = {
  "cells": [
@@ -116,9 +120,22 @@ notebook_content = {
     "val_df   = pd.read_csv(val_path)\n",
     "test_df  = pd.read_csv(test_path)\n",
     "\n",
-    "print(f\"Tập Train: {len(train_df)} dòng\")\n",
-    "print(f\"Tập Val:   {len(val_df)} dòng\")\n",
-    "print(f\"Tập Test:  {len(test_df)} dòng\")\n",
+    "print(f\"Tập Train: {len(train_df)} dòng ({len(train_df)/6927*100:.1f}%)\")\n",
+    "print(f\"Tập Val:   {len(val_df)} dòng ({len(val_df)/6927*100:.1f}%)\")\n",
+    "print(f\"Tập Test:  {len(test_df)} dòng ({len(test_df)/6927*100:.1f}%)\")\n",
+    "print(f\"Kiểm tra giá trị thiếu (Null/NaN): Train={train_df.isnull().sum().sum()}, Val={val_df.isnull().sum().sum()}, Test={test_df.isnull().sum().sum()}\")\n",
+    "print(f\"Kiểm tra trùng lặp hoàn toàn (Exact Duplicates): Train={train_df.duplicated().sum()}, Val={val_df.duplicated().sum()}, Test={test_df.duplicated().sum()}\")\n",
+    "\n",
+    "# Bảng đối chiếu phân bố phân tầng (Stratified Split 80-10-10) trên cả 3 tập\n",
+    "strat_df = pd.DataFrame({\n",
+    "    'Train (mẫu)': train_df['label'].value_counts(),\n",
+    "    'Train (%)': (train_df['label'].value_counts(normalize=True) * 100).round(2),\n",
+    "    'Val (mẫu)': val_df['label'].value_counts(),\n",
+    "    'Val (%)': (val_df['label'].value_counts(normalize=True) * 100).round(2),\n",
+    "    'Test (mẫu)': test_df['label'].value_counts(),\n",
+    "    'Test (%)': (test_df['label'].value_counts(normalize=True) * 100).round(2)\n",
+    "})\n",
+    "display(strat_df)\n",
     "\n",
     "# Xem 5 mẫu đầu tiên\n",
     "train_df.head()"
@@ -133,7 +150,7 @@ notebook_content = {
     "# Thống kê phân bố 7 nhãn cảm xúc trên tập Train\n",
     "plt.figure(figsize=(9, 4))\n",
     "order = train_df['label'].value_counts().index\n",
-    "sns.countplot(data=train_df, x='label', order=order, palette='viridis')\n",
+    "sns.countplot(data=train_df, x='label', hue='label', order=order, palette='viridis', legend=False)\n",
     "plt.title(\"Phân bố 7 nhãn cảm xúc trên tập Train UIT-VSMEC\")\n",
     "plt.xlabel(\"Nhãn cảm xúc\")\n",
     "plt.ylabel(\"Số lượng mẫu\")\n",
@@ -477,8 +494,10 @@ notebook_content = {
     "\n",
     "acc_only_pct = test_acc_only * 100\n",
     "wf1_only_pct = test_wf1_only * 100\n",
+    "mf1_only_pct = test_mf1_only * 100\n",
     "acc_full_pct = test_acc_full * 100\n",
     "wf1_full_pct = test_wf1_full * 100\n",
+    "mf1_full_pct = test_mf1_full * 100\n",
     "\n",
     "comparison_records = [\n",
     "    {\n",

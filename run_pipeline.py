@@ -1,89 +1,99 @@
 import os
 import re
 import sys
+import time
 import unicodedata
 import pandas as pd
 import numpy as np
 import matplotlib.pyplot as plt
 import seaborn as sns
 from pyvi import ViTokenizer
+from sklearn.pipeline import Pipeline, FeatureUnion
 from sklearn.feature_extraction.text import TfidfVectorizer
 from sklearn.svm import LinearSVC
-from sklearn.model_selection import GridSearchCV
+from sklearn.model_selection import GridSearchCV, StratifiedKFold
 from sklearn.metrics import classification_report, f1_score, confusion_matrix, accuracy_score
+from sklearn.base import clone
 
 sys.stdout.reconfigure(encoding='utf-8')
 
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 DATA_DIR = os.path.join(BASE_DIR, "data", "1_clapAI_UIT-VSMEC_csv")
 
-# 1. BẢNG ÁNH XẠ TEENCODE & CHUẨN HÓA TỪ VIẾT TẮT
+# 1. BẢNG CHUẨN HÓA TEENCODE & TỪ VIẾT TẮT MXH (CHUẨN HÓA CHÍNH TẢ KHÁCH QUAN)
 TEENCODE_DICT = {
-    'ko': 'không', 'k': 'không', 'khg': 'không', 'hông': 'không', 'hổng': 'không',
-    'dc': 'được', 'đc': 'được', 'dk': 'được', 'đk': 'được',
-    'j': 'gì', 'wa': 'quá', 'wá': 'quá', 'waa': 'quá',
-    'bik': 'biết', 'bít': 'biết', 'vs': 'với', 'cx': 'cũng',
+    'ko': 'không', 'k': 'không', 'khg': 'không', 'hông': 'không', 'hổng': 'không', 
+    'kô': 'không', 'hok': 'không', 'hem': 'không', 'khong': 'không',
+    'dc': 'được', 'đc': 'được', 'dk': 'được', 'đk': 'được', 'đựoc': 'được', 'duoc': 'được',
+    'j': 'gì', 'wa': 'quá', 'wá': 'quá', 'waa': 'quá', 'woa': 'quá', 'qua': 'quá',
+    'bik': 'biết', 'bít': 'biết', 'biet': 'biết',
+    'vs': 'với', 'cx': 'cũng',
     'r': 'rồi', 'rùi': 'rồi', 'thui': 'thôi', 'chừ': 'giờ',
-    'ae': 'anh em', 'mn': 'mọi người', 'cmt': 'bình luận',
-    'sgk': 'sách giáo khoa', 'huhu': 'huhu emoji_buon', 'haha': 'haha emoji_vui',
-    'ntn': 'như thế nào', 'nv': 'như vậy', 'ib': 'inbox', 'fb': 'facebook',
-    'ad': 'admin', 'cty': 'công ty', 'stt': 'status', 'nyc': 'người yêu cũ'
+    'ae': 'anh em', 'mn': 'mọi người', 'mng': 'mọi người', 'cmt': 'bình luận',
+    'sgk': 'sách giáo khoa',
+    'ntn': 'như thế nào', 'nv': 'như vậy', 'ib': 'nhắn tin', 'fb': 'facebook',
+    'ad': 'admin', 'cty': 'công ty', 'stt': 'status', 'nyc': 'người yêu cũ',
+    'mik': 'mình', 'mk': 'mình',
+    'nhg': 'nhưng', 'lm': 'làm', 'ms': 'mới', 'kp': 'không phải',
+    'bt': 'bình thường', 'uk': 'ừ', 'uh': 'ừ', 'uhm': 'ừ', 'ừm': 'ừ',
+    'vl': 'vãi', 'vcl': 'vãi', 'clgt': 'cái gì thế',
+    'kb': 'kết bạn', 'qtqd': 'quá trời quá đất', 'đt': 'điện thoại'
 }
 
 def preprocess_text(text):
-    """
-    Hàm tiền xử lý văn bản chuyên sâu cho tiếng Việt mạng xã hội (UIT-VSMEC)
-    1. Chuẩn hóa Unicode NFC
-    2. Xóa URL
-    3. Ánh xạ Emoticon & Emoji thành các token cảm xúc đặc trưng
-    4. Chuẩn hóa Teencode
-    5. Giảm thiểu ký tự lặp kéo dài (quáaaa -> quá)
-    6. Tách từ tiếng Việt bằng PyVi
-    """
     text = str(text)
-    # 1. Chuẩn hóa Unicode NFC
+    
+    # 1. Chuẩn hóa bảng mã Unicode NFC
     text = unicodedata.normalize('NFC', text)
     
-    # 2. Xóa URL
+    # 2. Xóa URL rác
     text = re.sub(r'http\S+|www\.\S+', ' ', text)
     
-    # 3. Ánh xạ Emoticon
-    text = re.sub(r':\)+|:\-\)+|\^_\^|\^\^|:D|:d|xD|XD|;\)|;-\)', ' icon_vui ', text)
-    text = re.sub(r':\(+|:\-\(+|T_T|T\.T|:\'\(|:\{+', ' icon_buon ', text)
-    text = re.sub(r':O|:o|:-O|:-o|o_O|O_o', ' icon_ngac_nhien ', text)
-    text = re.sub(r':3', ' icon_meo ', text)
+    # 3. Ánh xạ Emoticon cảm xúc
+    text = re.sub(r':\)+|:\-\)+|\^_\^|\^\^|:D|:d|xD|XD|;\)|;-\)|:3|\(y\)', ' icon_vui ', text)
+    text = re.sub(r":\(+|:\-\(+|T_T|T\.T|:'\(|:\{+|;-;", ' icon_buon ', text)
+    text = re.sub(r':O|:o|:-O|:-o|o_O|O_o|O\.o|o\.O|@@', ' icon_ngac_nhien ', text)
     text = re.sub(r'<3|♥', ' icon_yeu ', text)
     
-    # Ánh xạ Emoji
-    text = re.sub(r'[😭😢😿😥🥺💔]', ' emoji_buon ', text)
-    text = re.sub(r'[😂🤣😄😃😀😊😆😁🥰😍😘❤️💖👍]', ' emoji_vui ', text)
-    text = re.sub(r'[😡😠🤬👿💢]', ' emoji_tuc_gian ', text)
-    text = re.sub(r'[🤢🤮😒🙄💩]', ' emoji_kinh_tom ', text)
-    text = re.sub(r'[😱😨😰👻💀]', ' emoji_so_hai ', text)
-    text = re.sub(r'[😲😯🤯😳😮🙀]', ' emoji_ngac_nhien ', text)
+    # 4. Ánh xạ Emoji cảm xúc
+    text = re.sub(r'[😭😢😿😥🥺💔🌧️🥀😞😔]', ' emoji_buon ', text)
+    text = re.sub(r'[😂🤣😄😃😀😊😆😁🥰😍😘❤️💖👍🎉✨👏💐]', ' emoji_vui ', text)
+    text = re.sub(r'[😡😠🤬👿💢😤🖕]', ' emoji_tuc_gian ', text)
+    text = re.sub(r'[🤢🤮😒🙄💩👎]', ' emoji_kinh_tom ', text)
+    text = re.sub(r'[😱😨😰👻💀🥶]', ' emoji_so_hai ', text)
+    text = re.sub(r'[😲😯🤯😳😮🙀🧐‼️⁉️]', ' emoji_ngac_nhien ', text)
     
-    # 4. Chuyển chữ thường
+    # 5. XỬ LÝ TIẾNG CƯỜI / KHÓC ĐẶC THÙ MXH TRƯỚC KHI RÚT GỌN LẶP
+    text = re.sub(r'\b(k{3,}|kkk+)\b', ' icon_vui ', text, flags=re.IGNORECASE)
+    text = re.sub(r'\b((ha){2,}|(hi){2,}|(he){2,}|h{3,})\b', ' emoji_vui ', text, flags=re.IGNORECASE)
+    text = re.sub(r'\b(hu){2,}|huhu\b', ' emoji_buon ', text, flags=re.IGNORECASE)
+    
+    # 6. Bảo tồn dấu câu cảm xúc quan trọng (Surprise và Anger)
+    text = re.sub(r'!+', ' token_than ', text)
+    text = re.sub(r'\?+', ' token_hoi ', text)
+    
+    # 7. Thay thế dấu câu và ký tự đặc biệt còn lại bằng khoảng trắng TRƯỚC KHI tra teencode
+    text = re.sub(r'[^\w\s_]', ' ', text)
+    
+    # 8. Chuyển về chữ thường
     text = text.lower()
     
-    # 5. Rút gọn ký tự lặp kéo dài trước (ví dụ: đẹpppp -> đẹp, waaa -> wa)
+    # 9. Rút gọn ký tự lặp kéo dài (ví dụ: đẹpppp -> đẹp, ngonnn -> ngon)
     text = re.sub(r'([a-zA-Zà-ỹÀ-Ỹ])\1{2,}', r'\1', text)
     
-    # 6. Chuẩn hóa teencode sau khi đã rút gọn (ví dụ: wa -> quá)
+    # 10. Chuẩn hóa Teencode khách quan sau khi đã tách rời dấu câu
     words = [TEENCODE_DICT.get(w, w) for w in text.split()]
     text = ' '.join(words)
-    
-    # 7. Giữ lại chữ cái, số, khoảng trắng và gạch dưới (để giữ các token emoji_vui...)
-    text = re.sub(r'[^\w\s_]', ' ', text)
     text = re.sub(r'\s+', ' ', text).strip()
     
-    # 8. Tách từ tiếng Việt
+    # 11. Tách từ tiếng Việt bằng PyVi
     return ViTokenizer.tokenize(text)
 
 def main():
-    print("=" * 60)
-    print("PIPELINE NHẬN DIỆN CẢM XÚC UIT-VSMEC (TF-IDF + LINEAR SVM)")
+    print("=" * 65)
+    print("PIPELINE NHẬN DIỆN CẢM XÚC UIT-VSMEC (FEATUREUNION + LINEAR SVM)")
     print("NHÓM 12 - NHẬP MÔN XỬ LÝ NGÔN NGỮ TỰ NHIÊN")
-    print("=" * 60)
+    print("=" * 65)
     
     train_file = os.path.join(DATA_DIR, "train.csv")
     val_file = os.path.join(DATA_DIR, "val.csv")
@@ -97,113 +107,121 @@ def main():
     print(f" - Val:   {len(val_df)} mẫu")
     print(f" - Test:  {len(test_df)} mẫu")
     
-    print("\n2. Đang thực hiện tiền xử lý văn bản (Unicode NFC, Emoji, Teencode, PyVi)...")
+    print("\n2. Đang thực hiện tiền xử lý văn bản...")
     train_df['clean_text'] = train_df['text'].apply(preprocess_text)
     val_df['clean_text'] = val_df['text'].apply(preprocess_text)
     test_df['clean_text'] = test_df['text'].apply(preprocess_text)
     print(" -> Tiền xử lý hoàn tất!")
     
-    print("\n3. Vector hóa đặc trưng bằng TF-IDF (ngram_range=(1, 2), max_features=10000)...")
-    tfidf = TfidfVectorizer(ngram_range=(1, 2), max_features=10000, sublinear_tf=True)
-    # LƯU Ý: fit_transform CHỈ trên tập train để chống rò rỉ dữ liệu (Data Leakage)
-    X_train = tfidf.fit_transform(train_df['clean_text'])
-    X_val = tfidf.transform(val_df['clean_text'])
-    X_test = tfidf.transform(test_df['clean_text'])
-    
     y_train = train_df['label']
     y_val = val_df['label']
     y_test = test_df['label']
-    print(f" -> Kích thước ma trận Train: {X_train.shape}")
-    print(f" -> Kích thước ma trận Val:   {X_val.shape}")
-    print(f" -> Kích thước ma trận Test:  {X_test.shape}")
     
-    print("\n4. Tinh chỉnh siêu tham số C cho Linear SVM bằng GridSearchCV (5-Fold CV)...")
+    print("\n3. Xây dựng Pipeline (FeatureUnion: Word + Char_wb TF-IDF & LinearSVC)...")
+    features = FeatureUnion([
+        ('word', TfidfVectorizer(
+            ngram_range=(1, 2),
+            sublinear_tf=True,
+            min_df=2,
+            max_df=0.9,
+            lowercase=True
+        )),
+        ('char', TfidfVectorizer(
+            analyzer='char_wb',
+            ngram_range=(2, 5),
+            sublinear_tf=True,
+            min_df=2,
+            lowercase=True
+        ))
+    ])
+
+    pipe = Pipeline([
+        ('tfidf', features),
+        ('svm', LinearSVC(random_state=42, max_iter=5000, class_weight='balanced'))
+    ])
+
     param_grid = {
-        'C': [0.1, 0.3, 0.5, 0.8, 1.0, 1.5, 2.0]
+        'svm__C': [0.05, 0.1, 0.2, 0.3, 0.5, 1.0]
     }
-    svm_base = LinearSVC(random_state=42, max_iter=3000, class_weight='balanced')
-    grid_search = GridSearchCV(
-        svm_base,
+
+    cv = StratifiedKFold(n_splits=5, shuffle=True, random_state=42)
+    grid = GridSearchCV(
+        pipe,
         param_grid,
-        cv=5,
+        cv=cv,
         scoring='f1_macro',
         n_jobs=-1,
         verbose=1
     )
-    grid_search.fit(X_train, y_train)
+
+    print("\n4. Tinh chỉnh siêu tham số C bằng 5-Fold StratifiedKFold...")
+    t_start = time.time()
+    grid.fit(train_df['clean_text'], y_train)
+    best_c = grid.best_params_['svm__C']
+    print(f" -> Hoàn thành trong {time.time() - t_start:.2f}s | Best C = {best_c} | Best CV Macro F1 = {grid.best_score_:.4f}")
     
-    print(f"\n -> Best Parameter C: {grid_search.best_params_['C']}")
-    print(f" -> Best Cross-Validation Macro F1: {grid_search.best_score_:.4f}")
-    
-    # Bảng đối sánh hiệu năng các giá trị C
-    results_df = pd.DataFrame(grid_search.cv_results_)
-    comparison_table = results_df[['param_C', 'mean_test_score', 'std_test_score', 'rank_test_score']]
-    comparison_table.columns = ['Giá trị C', 'Mean Macro F1 (CV)', 'Std (Độ lệch chuẩn)', 'Thứ hạng']
+    results_df = pd.DataFrame(grid.cv_results_)
+    c_table = results_df[['param_svm__C', 'mean_test_score', 'std_test_score', 'rank_test_score']].copy()
+    c_table.columns = ['Giá trị C', 'Mean Macro F1 (CV)', 'Độ lệch chuẩn (Std)', 'Thứ hạng']
+    c_table.sort_values(by='Thứ hạng', inplace=True)
     print("\nBẢNG ĐỐI SÁNH HIỆU NĂNG CÁC GIÁ TRỊ C:")
-    print(comparison_table.to_string(index=False))
+    print(c_table.to_string(index=False))
+    c_table.to_csv(os.path.join(BASE_DIR, "c_comparison_results.csv"), index=False, encoding='utf-8-sig')
     
-    # Lưu bảng đối sánh C ra CSV
-    comparison_table.to_csv(os.path.join(BASE_DIR, "c_comparison_results.csv"), index=False, encoding='utf-8-sig')
+    best_model_train_only = grid.best_estimator_
+    pred_val_only = best_model_train_only.predict(val_df['clean_text'])
+    pred_test_only = best_model_train_only.predict(test_df['clean_text'])
     
-    best_model = grid_search.best_estimator_
+    val_acc_only = accuracy_score(y_val, pred_val_only)
+    val_mf1_only = f1_score(y_val, pred_val_only, average='macro')
+    val_wf1_only = f1_score(y_val, pred_val_only, average='weighted')
     
-    print("\n5. Đánh giá mô hình tốt nhất:")
-    # Đánh giá trên Validation
-    y_pred_val = best_model.predict(X_val)
-    val_macro_f1 = f1_score(y_val, y_pred_val, average='macro')
-    val_weighted_f1 = f1_score(y_val, y_pred_val, average='weighted')
-    val_acc = accuracy_score(y_val, y_pred_val)
-    print(f"--- TẬP VALIDATION ---")
-    print(f"Accuracy:    {val_acc:.4f}")
-    print(f"Macro F1:    {val_macro_f1:.4f}")
-    print(f"Weighted F1: {val_weighted_f1:.4f}")
+    test_acc_only = accuracy_score(y_test, pred_test_only)
+    test_mf1_only = f1_score(y_test, pred_test_only, average='macro')
+    test_wf1_only = f1_score(y_test, pred_test_only, average='weighted')
     
-    # Đánh giá trên Test
-    y_pred_test = best_model.predict(X_test)
-    test_macro_f1 = f1_score(y_test, y_pred_test, average='macro')
-    test_weighted_f1 = f1_score(y_test, y_pred_test, average='weighted')
-    test_acc = accuracy_score(y_test, y_pred_test)
-    print(f"\n--- TẬP TEST ---")
-    print(f"Accuracy:    {test_acc:.4f}")
-    print(f"Macro F1:    {test_macro_f1:.4f}")
-    print(f"Weighted F1: {test_weighted_f1:.4f}")
+    print("\n" + "=" * 65)
+    print("GIAO THỨC 1: MÔ HÌNH TRAIN-ONLY (5,548 MẪU) - SO SÁNH CHUẨN VỚI BÀI BÁO")
+    print("=" * 65)
+    print(f"VAL  (686 mẫu) -> Acc: {val_acc_only*100:.2f}% | Macro F1: {val_mf1_only*100:.2f}% | Weighted F1: {val_wf1_only*100:.2f}%")
+    print(f"TEST (693 mẫu) -> Acc: {test_acc_only*100:.2f}% | Macro F1: {test_mf1_only*100:.2f}% | Weighted F1: {test_wf1_only*100:.2f}%")
     
-    print("\nBÁO CÁO CHI TIẾT THEO TỪNG NHÃN (PER-CLASS F1):")
+    full_train_text = pd.concat([train_df['clean_text'], val_df['clean_text']], ignore_index=True)
+    full_train_y = pd.concat([y_train, y_val], ignore_index=True)
+    final_model_full = clone(best_model_train_only)
+    final_model_full.fit(full_train_text, full_train_y)
+    pred_test_full = final_model_full.predict(test_df['clean_text'])
+    
+    print("\n" + "=" * 65)
+    print("GIAO THỨC 2: MÔ HÌNH MỞ RỘNG TỐI ƯU (TRAIN + VAL: 6,234 MẪU)")
+    print("=" * 65)
+    print(f"TEST (693 mẫu) -> Acc: {accuracy_score(y_test, pred_test_full)*100:.2f}% | Macro F1: {f1_score(y_test, pred_test_full, average='macro')*100:.2f}% | Weighted F1: {f1_score(y_test, pred_test_full, average='weighted')*100:.2f}%")
+    
+    print("\nBÁO CÁO CHI TIẾT THEO TỪNG NHÃN (PER-CLASS F1 - TRAIN-ONLY):")
     labels_order = sorted(list(y_test.unique()))
-    report_str = classification_report(y_test, y_pred_test, digits=4)
-    print(report_str)
+    print(classification_report(y_test, pred_test_only, digits=4))
     
-    # 6. Vẽ Ma trận nhầm lẫn (Confusion Matrix)
-    cm = confusion_matrix(y_test, y_pred_test, labels=labels_order)
+    cm = confusion_matrix(y_test, pred_test_only, labels=labels_order)
     plt.figure(figsize=(8, 6))
     sns.heatmap(cm, annot=True, fmt='d', cmap='Blues',
                 xticklabels=labels_order, yticklabels=labels_order)
-    plt.title(f"Confusion Matrix - Linear SVM (C={grid_search.best_params_['C']})\nTest Macro F1: {test_macro_f1:.4f}")
-    plt.xlabel("Predicted Label")
-    plt.ylabel("True Label")
+    plt.title(f"Confusion Matrix - Linear SVM (C={best_c})\nTest Macro F1 = {test_mf1_only:.4f}", fontsize=11, fontweight='bold')
+    plt.xlabel("Nhãn dự đoán (Predicted Label)")
+    plt.ylabel("Nhãn thực tế (True Label)")
     plt.tight_layout()
     cm_path = os.path.join(BASE_DIR, "confusion_matrix.png")
     plt.savefig(cm_path, dpi=300)
     plt.close()
-    print(f"\n -> Đã lưu biểu đồ Ma trận nhầm lẫn tại: {cm_path}")
     
-    # 7. Xuất file kết quả dự đoán predictions.csv theo đúng yêu cầu đề tài
-    # Cấu trúc gồm: id, text, ground_truth, predicted_label
     predictions_df = pd.DataFrame({
         'id': list(range(len(test_df))),
         'text': test_df['text'],
         'ground_truth': test_df['label'],
-        'predicted_label': y_pred_test
+        'predicted_label': pred_test_only
     })
     pred_path = os.path.join(BASE_DIR, "predictions.csv")
     predictions_df.to_csv(pred_path, index=False, encoding='utf-8-sig')
-    print(f" -> Đã xuất file dự đoán: {pred_path} ({len(predictions_df)} dòng)")
-    print("\n5 dòng đầu của predictions.csv:")
-    print(predictions_df.head())
-    
-    print("\n" + "=" * 60)
-    print("HOÀN THÀNH TOÀN BỘ PIPELINE THÀNH CÔNG!")
-    print("=" * 60)
+    print(f"\n -> Đã xuất file dự đoán: {pred_path} ({len(predictions_df)} dòng)")
 
 if __name__ == "__main__":
     main()

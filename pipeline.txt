@@ -1,29 +1,29 @@
 flowchart TD
-    subgraph S1 ["1. DỮ LIỆU ĐẦU VÀO (UIT-VSMEC CORPUS)"]
-        A["• Bộ dữ liệu bình luận Facebook tiếng Việt: 6,927 mẫu<br/>• Phân chia chuẩn: Train: 5,548 mẫu (80%) | Val: 686 mẫu (10%) | Test: 693 mẫu (10%)<br/>• Không gian 7 nhãn: Enjoyment, Disgust, Other, Sadness, Anger, Fear, Surprise"]
+    subgraph S1 ["1. TÌM HIỂU & CHUẨN BỊ BỘ DỮ LIỆU (DATA EXPLORATION)"]
+        A["• Bộ dữ liệu UIT-VSMEC: 6,927 bình luận Facebook tiếng Việt (Kiểm tra Null = 0, Duplicate = 0)<br/>• Phân chia phân tầng (Stratified Split 80-10-10): Train: 5,548 mẫu | Val: 686 mẫu | Test: 693 mẫu<br/>• Không gian 7 nhãn lệch mẫu: Enjoyment (1,558), Disgust (1,071), Other (1,021), Sadness (947), Anger (391), Fear (318), Surprise (242)"]
     end
 
-    subgraph S2 ["2. TIỀN XỬ LÝ VĂN BẢN CHUYÊN SÂU (PREPROCESSING)"]
-        B1["B1. Chuẩn hóa bảng mã Unicode NFC<br/>(Khắc phục lỗi phân mảnh dấu thanh tiếng Việt)"]
-        B2["B2. Xóa URL rác & Chuyển chữ thường (lowercase)"]
-        B3["B3. Bảo tồn Emoji & Emoticon<br/>(:)), ^^ -> icon_vui | 😭, :(( -> emoji_buon | 😡 -> emoji_tuc_gian)"]
-        B4["B4. Rút gọn ký tự lặp kéo dài (chạy trước)<br/>(quáaaaa -> quá, đẹpppp -> đẹp, waaa -> wa)"]
-        B5["B5. Chuẩn hóa Teencode & Từ viết tắt (chạy sau)<br/>(wa -> quá, ko -> không, dc -> được, j -> gì, cx -> cũng...)"]
+    subgraph S2 ["2. TIỀN XỬ LÝ VĂN BẢN CHUYÊN SÂU (PREPROCESSING PIPELINE)"]
+        B1["B1. Chuẩn hóa Unicode NFC & Xóa URL rác (http/www...)"]
+        B2["B2. Bảo tồn Emoticon & Emoji cảm xúc<br/>(:)), :D -> icon_vui | 😭, :(( -> emoji_buon | 😡 -> emoji_tuc_gian...)"]
+        B3["B3. Bắt tiếng cười/khóc TRƯỚC khi rút gọn lặp<br/>(kkk+, haha+, hihi+ -> icon_vui/emoji_vui, tránh lỗi kkk -> k -> không)"]
+        B4["B4. Bảo tồn dấu câu cảm xúc & Tách dấu câu<br/>(!+ -> token_than, ?+ -> token_hoi; thay dấu câu còn lại bằng khoảng trắng)"]
+        B5["B5. Rút gọn ký tự lặp kéo dài & Chuẩn hóa Teencode khách quan<br/>(đẹpppp -> đẹp; ko, -> không, dc. -> được, vl -> vãi)"]
         B6["B6. Tách từ ghép tiếng Việt (Word Segmentation)<br/>(Thư viện PyVi: thời buổi -> thời_buổi, nước mắt -> nước_mắt)"]
         
         B1 --> B2 --> B3 --> B4 --> B5 --> B6
     end
 
-    subgraph S3 ["3. TRÍCH XUẤT ĐẶC TRƯNG (TF-IDF VECTORIZATION)"]
-        C1["• TF-IDF Vectorizer với N-gram Range: (1, 2) (bắt trọn cụm phủ định như 'không thích')<br/>• Cấu hình tối ưu: max_features = 10,000 từ quan trọng nhất | sublinear_tf = True<br/>• Nguyên tắc chống rò rỉ (No Data Leakage): fit_transform CHỈ trên Train; Val & Test chỉ transform"]
+    subgraph S3 ["3. TRÍCH XUẤT ĐẶC TRƯNG KÉP (FEATUREUNION: WORD + CHAR_WB TF-IDF)"]
+        C1["• Kiến trúc FeatureUnion kết hợp 2 tầng đặc trưng (tương tự Mục 5.2 bài báo gốc UIT):<br/>  1) Word TF-IDF: ngram_range = (1, 2), sublinear_tf = True, min_df = 2, max_df = 0.9<br/>  2) Char_wb TF-IDF: analyzer = 'char_wb', ngram_range = (2, 5), sublinear_tf = True, min_df = 2<br/>• Đóng gói trong sklearn.pipeline.Pipeline đảm bảo chống rò rỉ dữ liệu tuyệt đối (Zero Data Leakage)"]
     end
 
     subgraph S4 ["4. HUẤN LUYỆN & TINH CHỈNH MÔ HÌNH (LINEAR SVM & GRIDSEARCHCV)"]
-        D1["• Thuật toán: Linear Support Vector Classification (LinearSVC)<br/>• Xử lý lệch nhãn: class_weight = 'balanced' (tự động cân chỉnh trọng số phạt hỗ trợ nhãn ít mẫu)<br/>• Tinh chỉnh siêu tham số C bằng 5-Fold Stratified Cross-Validation (C ∈ [0.1, 0.3, 0.5, 0.8, 1.0, 1.5, 2.0])<br/>• Tiêu chí tối ưu: scoring = 'f1_macro' -> Siêu tham số tối ưu nhất: C = 0.3 (Rank 1)"]
+        D1["• Thuật toán phân loại: Linear Support Vector Classification (LinearSVC, random_state = 42)<br/>• Xử lý mất cân bằng lớp: class_weight = 'balanced' (tự động phạt nặng khi đoán sai các nhãn ít mẫu)<br/>• Tinh chỉnh siêu tham số C qua 5-Fold StratifiedKFold (C ∈ [0.05, 0.1, 0.2, 0.3, 0.5, 1.0])<br/>• Độ đo mục tiêu: scoring = 'f1_macro' -> Siêu tham số tối ưu: C = 0.3 (Best CV Macro F1 = 53.91%)"]
     end
 
-    subgraph S5 ["5. ĐÁNH GIÁ MÔ HÌNH & XUẤT KẾT QUẢ (EVALUATION & INFERENCE)"]
-        E1["• Hiệu năng tập Test: Accuracy = 58.87% | Macro F1 = 55.97% | Weighted F1 = 58.88%<br/>• Hiệu năng tập Validation: Accuracy = 55.39% | Macro F1 = 51.81% | Weighted F1 = 55.54%<br/>• Sản phẩm bàn giao hoàn chỉnh: predictions.csv (693 dòng), confusion_matrix.png, c_comparison_results.csv"]
+    subgraph S5 ["5. ĐÁNH GIÁ KẾT QUẢ & TRỰC QUAN HÓA (EVALUATION & VISUALIZATION)"]
+        E1["• Giao thức 1 (Train-Only: 5,548 mẫu - So sánh chuẩn bài báo): Test Acc = 60.89% | Macro F1 = 57.75% | Weighted F1 = 60.92%<br/>• Giao thức 2 (Train + Val: 6,234 mẫu - Mở rộng tối ưu): Test Acc = 61.04% | Macro F1 = 58.24% | Weighted F1 = 61.16%<br/>• Per-class Test F1 (Train-Only): Enjoyment: 69.61% | Sadness: 67.83% | Fear: 64.00% | Disgust: 56.83% | Surprise: 56.76% | Other: 53.94% | Anger: 35.29%<br/>• Trực quan hóa & Bàn giao: Bảng Ablation Study, Confusion Matrix (confusion_matrix.png), predictions.csv (693 dòng)"]
     end
 
     S1 --> S2
